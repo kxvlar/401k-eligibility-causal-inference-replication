@@ -1,0 +1,89 @@
+---
+title: "Untitled"
+format: html
+---
+
+
+```{r}
+library(readr)
+library(stringr)
+
+# Parse SAS input file into fwf positions for read_fwf()
+sas_to_fwf <- function(sasfile) {
+  sas <- readLines(sasfile)
+
+  # Lines shaped like: VAR $ 1-5  or  VAR 10-12
+  pattern <- "^\\s*([A-Za-z0-9_]+)\\s+\\$?\\s*(\\d+)\\s*-\\s*(\\d+)"
+
+  m <- str_match(sas, pattern)
+
+  # Keep rows where the regex matched
+  m <- m[!is.na(m[,1]), , drop = FALSE]
+
+  varnames <- m[, 2]
+  start    <- as.integer(m[, 3])
+  end      <- as.integer(m[, 4])
+
+  widths <- end - start + 1
+
+  fwf_widths(widths, col_names = varnames)
+}
+
+
+```
+
+
+```{r}
+library(readr)
+library(stringr)
+
+# helper to convert .sas layout into fwf specification 
+sas_to_fwf <- function(sasfile) {
+  sas <- readLines(sasfile)
+  pattern <- "^\\s*([A-Za-z0-9_]+)\\s+\\$?\\s*(\\d+)\\s*-\\s*(\\d+)"
+  m <- str_match(sas, pattern)
+  m <- m[!is.na(m[,1]), , drop = FALSE]
+  varnames <- m[,2]
+  start <- as.integer(m[,3])
+  end <- as.integer(m[,4])
+  widths <- end - start + 1
+  fwf_widths(widths, col_names = varnames)
+}
+
+# directories 
+raw_dir <- "data/raw"
+out_dir <- file.path(raw_dir, "rds")
+dir.create(out_dir, showWarnings = FALSE)
+
+# list of file stems 
+stems <- c("t3", "t6", "t7", "t9", "t12",
+           "w7", "w8", "w9")
+
+# loop to convert all files 
+for (stem in stems) {
+
+  datfile <- file.path(raw_dir, paste0(stem, ".dat"))
+  sasfile <- file.path(raw_dir, paste0(stem, ".sas"))
+  rdsfile <- file.path(out_dir, paste0(stem, ".rds"))
+
+  if (!file.exists(datfile)) next
+  if (!file.exists(sasfile)) next
+  
+  fwf <- sas_to_fwf(sasfile)
+  df <- read_fwf(datfile, fwf, progress = FALSE)
+  
+  saveRDS(df, rdsfile)
+}
+
+
+```
+```{r}
+t7 <- readRDS("data/raw/rds/t7.rds")
+
+dim(t7)       # rows, columns
+head(t7)      # first few rows
+str(t7)       # structure (types, names)
+names(t7)     # column names
+
+
+```
