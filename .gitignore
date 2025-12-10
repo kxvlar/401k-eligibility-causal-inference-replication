@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# R / renv
+renv/library/
+renv/python/
+renv/staging/
+renv/local/
+
+# R
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj.user
+
+# Data files (if needed to exclude)
+# *.dat
+
