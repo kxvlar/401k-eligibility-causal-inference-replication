@@ -1,0 +1,153 @@
+---
+title: "Matching"
+format: html
+---
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(MatchIt)
+
+run_matching_att <- function(df,
+                             outcome_var = "taltb",
+                             treat_var   = "temp",
+                             covars,
+                             B = 300,
+                             seed = 156) {
+  # 1. Main analysis sample (same as IPW)
+  dat <- make_ipw_sample3(df)
+  
+  # 2. Build outcome
+  dat$y401k_ipw <- make_ipw_outcome3(dat, outcome_var)
+  
+  # 3. Check covariates exist
+  missing_covars <- setdiff(covars, names(dat))
+  if (length(missing_covars) > 0) {
+    stop(
+      "These covariates are not in the data: ",
+      paste(missing_covars, collapse = ", ")
+    )
+  }
+  
+  # 4. Filter to non-missing treatment, outcome, and covariates
+  dat_complete <- dat %>%
+    filter(!is.na(.data[[treat_var]]),
+           !is.na(y401k_ipw)) %>%
+    drop_na(all_of(covars))
+  
+  if (nrow(dat_complete) == 0) {
+    stop(
+      "After filtering for non-missing treatment, outcome, and covariates, ",
+      "no observations remain. Check missingness again."
+    )
+  }
+  
+  # 5. PS formula: 
+# ALWAYS include age squared
+rhs_terms <- c("tage", "I(tage^2)", setdiff(covars, "tage"))
+rhs <- paste(rhs_terms, collapse = " + ")
+
+ps_formula <- as.formula(
+  paste0(treat_var, " ~ ", rhs)
+)
+
+  
+  # 6. Nearest neighbor matching on logit PS
+  m.out <- matchit(
+    formula  = ps_formula,
+    data     = dat_complete,
+    method   = "nearest",
+    distance = "logit",
+    replace  = FALSE,
+    ratio    = 1
+  )
+  
+  matched_dat <- match.data(m.out)
+  
+  # 7. ATT point estimate
+  z <- matched_dat[[treat_var]]
+  y <- matched_dat$y401k_ipw
+  
+  att_hat   <- mean(y[z == 1]) - mean(y[z == 0])
+  n_treated <- sum(z == 1)
+  n_control <- sum(z == 0)
+  N         <- nrow(matched_dat)
+  
+  # 8. Bootstrap SE + CI
+  set.seed(seed)
+  boot_ests <- replicate(B, {
+    idx <- sample(seq_len(N), replace = TRUE)
+    boot_dat <- matched_dat[idx, ]
+    z_b <- boot_dat[[treat_var]]
+    y_b <- boot_dat$y401k_ipw
+    mean(y_b[z_b == 1]) - mean(y_b[z_b == 0])
+  })
+  
+  se_hat <- sd(boot_ests)
+  ci_95  <- att_hat + c(-1, 1) * 1.96 * se_hat
+  
+  list(
+    estimate       = att_hat,
+    se             = se_hat,
+    ci_95          = ci_95,
+    n_treated      = n_treated,
+    n_control      = n_control,
+    n_matched_rows = N,
+    treat_var      = treat_var,
+    covariates     = covars
+  )
+}
+
+```
+```{r}
+covars_raw_aligned <- c("tage", "hh_inc_year", "incmissing")
+
+match_raw_aligned <- run_matching_att(
+  dat_raw_aligned_ipw,
+  outcome_var = "taltb",
+  treat_var   = "temp",
+  covars      = covars_raw_aligned
+)
+
+match_raw_aligned$estimate
+match_raw_aligned$se
+match_raw_aligned$ci_95
+match_raw_aligned$n_treated
+match_raw_aligned$n_control
+
+```
+```{r}
+covars_raw_non <- c("tage", "hh_inc_year", "incmissing",
+                    "educ_cat", "firm_size_cat", "industry1d", "days_on_job")
+
+match_raw_non <- run_matching_att(
+  dat_raw_ipw_non,
+  outcome_var = "taltb",
+  treat_var   = "temp",
+  covars      = covars_raw_non
+)
+
+match_raw_non$estimate
+match_raw_non$se
+match_raw_non$ci_95
+
+```
+```{r}
+covars_rep <- c("tage", "hh_inc_year", "incmissing",
+                "educ_cat", "firm_size_cat", "industry1d", "days_on_job")
+
+match_rep <- run_matching_att(
+  dat_rep_ipw_rep,
+  outcome_var = "taltb",
+  treat_var   = "temp",
+  covars      = covars_rep
+)
+
+match_rep$estimate
+match_rep$se
+match_rep$ci_95
+match_rep$n_treated
+match_rep$n_control
+
+```
