@@ -1,0 +1,331 @@
+---
+title: "Untitled"
+format: html
+---
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+## ----------------------------------------------------------
+## Helper: safe numeric conversion
+## ----------------------------------------------------------
+to_num <- function(x) suppressWarnings(as.numeric(x))
+
+## ----------------------------------------------------------
+## Helper: clean job start date (TSJDATE1)
+##   - convert to numeric
+##   - set non-positive / sentinel values (<=0, -1) to NA
+## ----------------------------------------------------------
+clean_tsjdate <- function(x) {
+  x <- suppressWarnings(as.numeric(x))
+  x[x <= 0] <- NA
+  x
+}
+
+## ----------------------------------------------------------
+## Helper: build assets for one wave
+## ----------------------------------------------------------
+make_assets_wave <- function(df, wave_num) {
+  df %>%
+    transmute(
+      SSUID, SHHADID, EENTAID, EPPPNUM,
+      wave = wave_num,
+      # 401(k) balance
+      taltb      = to_num(TALTB),
+      # IRA balance
+      thhira     = to_num(THHIRA),
+      # Other financial assets (interest, stocks, other assets)
+      otherassets = to_num(THHINTBK) +
+                    to_num(THHINTOT) +
+                    to_num(RHHSTK)   +
+                    to_num(THHOTAST),
+      # secured & unsecured debt
+      thhscdbt   = to_num(THHSCDBT),
+      rhhuscbt   = to_num(RHHUSCBT),
+      # car values: sum over up to 3 cars
+      tcarval    = to_num(TCARVAL1) +
+                   to_num(TCARVAL2) +
+                   to_num(TCARVAL3)
+    )
+}
+
+## ----------------------------------------------------------
+## MAIN: build_dat()
+##   takes t3,t6,t9,t12,t7,w7,w8,w9 and returns merged dataset
+##   with: age_ok, for_profit, yr1jb1, temp, y401k, notmissing,
+##         hh_inc_year, etc.
+## ----------------------------------------------------------
+build_dat <- function(t3, t6, t9, t12, t7, w7, w8, w9) {
+  id_vars <- c("SSUID","SHHADID","EENTAID","EPPPNUM")
+
+  ## 1) Assets across waves → wide
+  assets_long <- bind_rows(
+    make_assets_wave(t3,  3),
+    make_assets_wave(t6,  6),
+    make_assets_wave(t9,  9),
+    make_assets_wave(t12, 12)
+  )
+
+  assets_wide <- assets_long %>%
+    pivot_wider(
+      id_cols    = all_of(id_vars),
+      names_from = wave,
+      values_from = c(taltb, thhira, otherassets, thhscdbt, rhhuscbt, tcarval),
+      names_sep = ""
+    )
+
+  ## 2) Wave-7 core (panel = SREFMON==4)
+  core7 <- w7 %>%
+    filter(SREFMON == 4) %>%
+    transmute(
+      SSUID, SHHADID, EENTAID, EPPPNUM,
+      tage      = to_num(TAGE),
+      wpfinwgt  = to_num(WPFINWGT),
+      eclwrk1   = to_num(ECLWRK1),
+      efnp      = to_num(EFNP),
+      esex      = to_num(ESEX),
+      tempall1  = to_num(TEMPALL1),
+      ejbind1   = to_num(EJBIND1),
+      tsjdate1  = clean_tsjdate(TSJDATE1),
+      srotaton  = to_num(SROTATON)
+    )
+
+  ## 3) Year-1 income: sum THTOTINC from waves 7–9
+  make_inc <- function(w, tag) {
+    w %>%
+      select(SSUID, SHHADID, EENTAID, EPPPNUM, SREFMON, THTOTINC) %>%
+      mutate(
+        THTOTINC = to_num(THTOTINC),
+        month = paste0(tag, "_", SREFMON)
+      ) %>%
+      select(-SREFMON) %>%
+      pivot_wider(
+        id_cols = all_of(id_vars),
+        names_from = month,
+        values_from = THTOTINC
+      )
+  }
+
+  w7_inc <- make_inc(w7, "w7")
+  w8_inc <- make_inc(w8, "w8")
+  w9_inc <- make_inc(w9, "w9")
+
+  year1_income <- w7_inc %>%
+    full_join(w8_inc, by = id_vars) %>%
+    full_join(w9_inc, by = id_vars) %>%
+    mutate(
+      hh_inc_year = rowSums(
+        dplyr::select(., starts_with("w7_"), starts_with("w8_"), starts_with("w9_")),
+        na.rm = FALSE
+      )
+    ) %>%
+    select(all_of(id_vars), hh_inc_year)
+
+  ## 4) Topical module 7: plan eligibility and reasons
+  tm7 <- t7 %>%
+    transmute(
+      SSUID, SHHADID, EENTAID, EPPPNUM,
+      e1taxdef = to_num(E1TAXDEF),
+      e2taxdef = to_num(E2TAXDEF),
+      e3taxdef = to_num(E3TAXDEF),
+      enoina03 = to_num(ENOINA03),
+      enoinb03 = to_num(ENOINB03),
+      etdeffen = to_num(ETDEFFEN)
+    )
+
+  ## 5) Merge all pieces
+  dat <- assets_wide %>%
+    inner_join(core7,       by = id_vars) %>%
+    inner_join(tm7,         by = id_vars) %>%
+    left_join(year1_income, by = id_vars)
+
+  ## 6) Derive sample flags and d21ltaltb
+  #    (Make d21ltaltb robust in case some waves are missing)
+  has_t12 <- "taltb12" %in% names(dat)
+  has_t3  <- "taltb3"  %in% names(dat)
+
+  dat <- dat %>%
+    mutate(
+      age_ok   = !is.na(tage) & tage >= 22 & tage <= 64,
+      for_profit = (eclwrk1 == 1),
+
+      yr1jb1 = dplyr::case_when(
+        srotaton == 1 ~ tsjdate1 > 19970299,
+        srotaton == 2 ~ tsjdate1 > 19970399,
+        srotaton == 3 ~ tsjdate1 > 19970499,
+        srotaton == 4 ~ tsjdate1 > 19970599,
+        TRUE          ~ NA
+      ),
+
+      temp = as.integer(
+        (enoina03 == 1 & etdeffen == 1) |
+        (enoinb03 == 1)
+      ),
+
+      y401k = (temp == 1) |
+              (e1taxdef == 1) |
+              (e2taxdef == 1) |
+              (e3taxdef == 1) |
+              (etdeffen == 1 & yr1jb1 == 1),
+
+      # main outcome (use 6–9–12 if available, else 3–6–9)
+      d21ltaltb = dplyr::case_when(
+        has_t12 ~ log(taltb12 + 10) - 2 * log(taltb9 + 10) + log(taltb6 + 10),
+        has_t3  ~ log(taltb9  + 10) - 2 * log(taltb6 + 10) + log(taltb3 + 10),
+        TRUE    ~ NA_real_
+      ),
+
+      lnA6      = log(taltb6 + 10),
+
+      # income: allowed to be missing, we flag it
+      incmissing = as.integer(is.na(hh_inc_year)),
+
+      # require outcome + key regressors present
+      notmissing = !is.na(d21ltaltb) &
+                   !is.na(tage) &
+                   !is.na(eclwrk1) &
+                   !is.na(tsjdate1) &
+                   !is.na(srotaton) &
+                   !is.na(wpfinwgt)
+    )
+
+  dat
+}
+
+## ----------------------------------------------------------
+## Helpers to build Table 1 from a built dat
+## ----------------------------------------------------------
+w_mean_sd <- function(x, w) {
+  x <- as.numeric(x)
+  w <- as.numeric(w)
+  ok <- !is.na(x) & !is.na(w)
+  x  <- x[ok]; w <- w[ok]
+  if (!length(x)) return(c(mean = NA_real_, sd = NA_real_))
+  w  <- w / sum(w)
+  mu <- sum(w * x)
+  var <- sum(w * (x - mu)^2)
+  c(mean = mu, sd = sqrt(var))
+}
+
+make_block <- function(df) {
+  out <- list(
+    Age                     = w_mean_sd(df$tage,          df$wpfinwgt),
+    `Yearly household income` =
+      w_mean_sd(df$hh_inc_year,   df$wpfinwgt),
+    `401(k) assets`         =
+      w_mean_sd(df$taltb6,        df$wpfinwgt),
+    `IRA and Keogh assets`  =
+      w_mean_sd(df$thhira6,       df$wpfinwgt),
+    `Other financial assets`=
+      w_mean_sd(df$otherassets6,  df$wpfinwgt),
+    `Secured debt`          =
+      w_mean_sd(df$thhscdbt6,     df$wpfinwgt),
+    `Unsecured debt`        =
+      w_mean_sd(df$rhhuscbt6,     df$wpfinwgt),
+    `Car value`             =
+      w_mean_sd(df$tcarval6,      df$wpfinwgt)
+  )
+  vals <- lapply(out, function(msd)
+    sprintf("%.1f\n(%.1f)", msd["mean"], msd["sd"]))
+  tibble::as_tibble_row(vals)
+}
+
+make_table1 <- function(dat) {
+  # Apply the same sample restrictions as in the Stata do-file
+  table1_sample <- dat %>%
+    filter(
+      age_ok,
+      for_profit,
+      yr1jb1 == 1,
+      y401k,
+      notmissing
+    )
+
+  cat("Table 1 sample size: ", nrow(table1_sample), "\n")
+  cat("Treatment (temp==1): ", sum(table1_sample$temp == 1, na.rm = TRUE), "\n")
+  cat("Control   (temp==0): ", sum(table1_sample$temp == 0, na.rm = TRUE), "\n")
+
+  income_sample <- table1_sample %>%
+    filter(!is.na(hh_inc_year))
+  cat("Income row N (non-missing hh_inc_year): ", nrow(income_sample), "\n")
+
+  tab_all <- make_block(table1_sample) %>%
+    mutate(group = "All",
+           Observations = nrow(table1_sample))
+
+  tab_treat <- make_block(filter(table1_sample, temp == 1)) %>%
+    mutate(group = "Treatment group",
+           Observations = sum(table1_sample$temp == 1, na.rm = TRUE))
+
+  tab_ctrl <- make_block(filter(table1_sample, temp == 0)) %>%
+    mutate(group = "Control group",
+           Observations = sum(table1_sample$temp == 0, na.rm = TRUE))
+
+  bind_rows(tab_all, tab_treat, tab_ctrl) %>%
+    relocate(group, Observations)
+}
+
+
+```
+```{r}
+
+dat_raw <- build_dat(
+  t3_raw, t6_raw, t9_raw, t12_raw,
+  t7_raw, w7_raw, w8_raw, w9_raw
+)
+
+table1_raw <- make_table1(dat_raw)
+table1_raw
+dat_rep <- build_dat(
+  t3_rep, t6_rep, t9_rep, t12_rep,
+  t7_rep, w7_rep, w8_rep, w9_rep
+)
+
+table1_rep <- make_table1(dat_rep)
+table1_rep
+```
+```{r}
+id_vars <- c("SSUID","SHHADID","EENTAID","EPPPNUM")
+
+normalize_ids <- function(df) {
+  df %>%
+    mutate(
+      SSUID   = sub("^0+", "", as.character(SSUID)),
+      SHHADID = sub("^0+", "", as.character(SHHADID)),
+      EENTAID = sub("^0+", "", as.character(EENTAID)),
+      EPPPNUM = sub("^0+", "", as.character(EPPPNUM))
+    )
+}
+
+dat_raw_id <- normalize_ids(dat_raw)
+dat_rep_id <- normalize_ids(dat_rep)
+
+```
+```{r}
+flags_rep <- dat_rep_id %>%
+  select(all_of(id_vars),
+         yr1jb1_rep = yr1jb1,
+         temp_rep   = temp,
+         y401k_rep  = y401k)
+
+```
+```{r}
+dat_raw_aligned <- dat_raw_id %>%
+  left_join(flags_rep, by = id_vars) %>%
+  mutate(
+    yr1jb1 = yr1jb1_rep,
+    temp   = temp_rep,
+    y401k  = y401k_rep
+  )
+
+```
+```{r}
+table1_rep  <- make_table1(dat_rep_id)
+table1_raw2 <- make_table1(dat_raw_aligned)
+
+table1_rep
+table1_raw2
+                                                                                                            
+```
