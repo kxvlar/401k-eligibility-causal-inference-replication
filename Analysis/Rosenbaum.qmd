@@ -15,9 +15,21 @@ library(tidyr)
 library(MatchIt)
 library(rbounds)
 
+make_ipw_sample3 <-function (dat) 
+{
+    dat %>% filter(age_ok, for_profit, yr1jb1 == 1, y401k, notmissing)
+}
+
+make_ipw_outcome3 <- function (df, base) 
+{
+    a6 <- df[[paste0(base, "6")]]
+    a9 <- df[[paste0(base, "9")]]
+    a12 <- df[[paste0(base, "12")]]
+    log(a12 + 10) - 2 * log(a9 + 10) + log(a6 + 10)
+}
 
 ## NOTE:
-## This script assumes the following already exist in the environment:
+##RUN THESE FIRST
 ## - dat_raw_aligned_ipw
 ## - dat_raw_ipw_non
 ## - dat_rep_ipw_rep
@@ -242,4 +254,75 @@ rosen_rep
 
 
 
+```
+```{r}
+
+#install.packages("cobalt")
+
+
+library(cobalt)
+
+love.plot(
+  match_rep$m.out,
+  stats      = "mean.diffs",
+  abs        = TRUE,
+  binary     = "std",          # <- force standardized for binary vars
+  var.order  = "unadjusted",
+  thresholds = c(m = 0.1),
+  title      = "Love Plot - Replication Sample"
+)
+
+
+```
+```{r}
+love.plot(
+  match_raw_aligned$m.out,
+  stats      = "mean.diffs",
+  abs        = TRUE,
+  binary     = "std",
+  var.order  = "unadjusted",
+  thresholds = c(m = 0.1),
+  title      = "Love Plot - Raw Aligned Sample"
+)
+
+love.plot(
+  match_raw_non$m.out,
+  stats      = "mean.diffs",
+  abs        = TRUE,
+  binary     = "std",
+  var.order  = "unadjusted",
+  thresholds = c(m = 0.1),
+  title      = "Love Plot - Raw Non-Restricted Sample"
+)
+```
+
+
+
+```{r}
+# Function to extract Rosenbaum bounds into a clean format
+extract_rosenbaum_table <- function(rosen_obj, sample_name) {
+  # 'hlsens' stores the data frame in $bounds
+  # Columns are typically: Gamma, Lower Bound, Upper Bound
+  df <- as.data.frame(rosen_obj$bounds)
+  
+  df %>%
+    mutate(sample = sample_name) %>%
+    select(sample, everything()) %>%
+    rename(
+      Gamma = 1,  # Usually the first column
+      Lower_HL = 2,
+      Upper_HL = 3
+    )
+}
+
+# Combine all results into one table
+rosen_summary_table <- bind_rows(
+  extract_rosenbaum_table(rosen_raw_aligned, "Raw aligned"),
+  extract_rosenbaum_table(rosen_raw_non, "Raw non-restricted"),
+  extract_rosenbaum_table(rosen_rep, "Replication")
+)
+
+
+
+print(rosen_summary_table)
 ```
