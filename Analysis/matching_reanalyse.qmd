@@ -131,7 +131,8 @@ match_raw_non <- run_matching_att(
 match_raw_non$estimate
 match_raw_non$se
 match_raw_non$ci_95
-
+match_raw_non$n_treated
+match_raw_non$n_control
 ```
 ```{r}
 covars_rep <- c("tage", "hh_inc_year", "incmissing",
@@ -150,4 +151,30 @@ match_rep$ci_95
 match_rep$n_treated
 match_rep$n_control
 
+```
+```{r}
+matching_summary <- tibble::tibble(
+  sample   = c("Raw aligned", "Raw non-restricted", "Replication"),
+  estimate = c(match_raw_aligned$estimate,
+               match_raw_non$estimate,
+               match_rep$estimate),
+  se       = c(match_raw_aligned$se,
+               match_raw_non$se,
+               match_rep$se),
+  ci_lower = c(match_raw_aligned$ci_95[1],
+               match_raw_non$ci_95[1],
+               match_rep$ci_95[1]),
+  ci_upper = c(match_raw_aligned$ci_95[2],
+               match_raw_non$ci_95[2],
+               match_rep$ci_95[2]),
+  n_treated = c(match_raw_aligned$n_treated,
+                match_raw_non$n_treated,
+                match_rep$n_treated),
+  n_control = c(match_raw_aligned$n_control,
+                match_raw_non$n_control,
+                match_rep$n_control)
+)
+
+# Print the table
+print(matching_summary)
 ```

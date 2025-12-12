@@ -90,7 +90,7 @@ run_dr_att <- function(df,
       (e_hat / (1 - e_hat)) * (1 - Z) * R0_hat
   )
   
-  # 8. Bootstrap SE and CI (using fixed nuisance estimates, like your ATE code)
+  # 8. Bootstrap SE and CI (using fixed nuisance estimates)
   set.seed(seed)
   
   boot_ests <- replicate(B, {
