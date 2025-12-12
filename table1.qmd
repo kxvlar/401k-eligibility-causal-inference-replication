@@ -10,9 +10,9 @@ library(tidyr)
 
 to_num <- function(x) suppressWarnings(as.numeric(x))
 
-## ----------------------------------------------------------
+
 ## 1. Load raw files
-## ----------------------------------------------------------
+
 
 t3  <- readRDS("data/raw/rds_down/t3.rds")
 t6  <- readRDS("data/raw/rds_down/t6.rds")
@@ -26,10 +26,10 @@ w9  <- readRDS("data/raw/rds_down/w9.rds")
 
 id_vars <- c("SSUID","SHHADID","EENTAID","EPPPNUM")
 
-## ----------------------------------------------------------
+
 ## 2. Assets: build taltb6, thhira6, otherassets6, etc.
 ##     Names are chosen to line up with the Stata do-file.
-## ----------------------------------------------------------
+
 
 make_assets_wave <- function(df, wave_num) {
   df %>%
@@ -72,9 +72,9 @@ assets_wide <- assets_long %>%
 # This gives: taltb3, taltb6, taltb9, taltb12, etc.
 # Wave 6 variables correspond to the Table 1 row (taltb6 → 401(k) assets).
 
-## ----------------------------------------------------------
+
 ## 3. Wave 7 core stuff (one record per person: SREFMON==4)
-## ----------------------------------------------------------
+
 
 core7 <- w7 %>%
   filter(SREFMON == 4) %>%  # this is how w7v2 is built in Stata
@@ -91,10 +91,10 @@ core7 <- w7 %>%
     srotaton  = to_num(SROTATON)
   )
 
-## ----------------------------------------------------------
+
 ## 3a. Calculate Year 1 household income (sum of all 12 months)
 ##     Wave 7 (months 1-4) + Wave 8 (months 1-4) + Wave 9 (months 1-4)
-## ----------------------------------------------------------
+
 
 # Wave 7 income by reference month
 w7_inc <- w7 %>%
@@ -137,9 +137,9 @@ year1_income <- w7_inc %>%
   ) %>%
   select(all_of(id_vars), hh_inc_year)
 
-## ----------------------------------------------------------
+
 ## 4. Topical module 7: 401(k) eligibility & reasons
-## ----------------------------------------------------------
+
 
 tm7 <- t7 %>%
   transmute(
@@ -152,9 +152,8 @@ tm7 <- t7 %>%
     etdeffen = to_num(ETDEFFEN)    # firm offers any tax-deferred plan
   )
 
-## ----------------------------------------------------------
 ## 5. Merge assets + core + topical + Year 1 income into one person-level dataset
-## ----------------------------------------------------------
+
 
 dat <- assets_wide %>%
   inner_join(core7, by = id_vars) %>%
@@ -163,9 +162,9 @@ dat <- assets_wide %>%
 
 cat("Rows in merged dat: ", nrow(dat), "\n")
 
-## ----------------------------------------------------------
+
 ## 6. Reproduce Stata sample flags: yr1jb1, temp, y401k, notmissing
-## ----------------------------------------------------------
+
 
 dat <- dat %>%
   mutate(
@@ -213,18 +212,14 @@ print(table(dat$y401k, useNA = "ifany"))
 cat("Counts: temp (treatment) 0/1:\n")
 print(table(dat$temp, useNA = "ifany"))
 
-## ----------------------------------------------------------
+
 ## 7. Table 1 *sample* = Stata's "main" restrictions
-## ----------------------------------------------------------
 ##    - age 22–64
 ##    - for-profit (eclwrk1==1)
 ##    - yr1jb1 == 1 (started job within the previous year)
 ##    - y401k == TRUE
 ##    - notmissing == TRUE  (has the data to construct d21ltaltb)
-##
-## This should land you very close to 835 total obs,
-## with ~296 treated and the rest control.
-## ----------------------------------------------------------
+
 
 table1_sample <- dat %>%
   filter(
@@ -245,9 +240,8 @@ income_sample <- table1_sample %>%
 
 cat("Income row N (non-missing hh_inc_year): ", nrow(income_sample), "\n")
 
-## ----------------------------------------------------------
 ## 8. Build Table 1 means/SDs (same variables as paper)
-## ----------------------------------------------------------
+
 
 w_mean_sd <- function(x, w) {
   x <- as.numeric(x)
