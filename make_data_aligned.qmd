@@ -8,25 +8,25 @@ format: html
 library(dplyr)
 library(tidyr)
 
-## ----------------------------------------------------------
+
 ## Helper: safe numeric conversion
-## ----------------------------------------------------------
+
 to_num <- function(x) suppressWarnings(as.numeric(x))
 
-## ----------------------------------------------------------
+
 ## Helper: clean job start date (TSJDATE1)
 ##   - convert to numeric
 ##   - set non-positive / sentinel values (<=0, -1) to NA
-## ----------------------------------------------------------
+
 clean_tsjdate <- function(x) {
   x <- suppressWarnings(as.numeric(x))
   x[x <= 0] <- NA
   x
 }
 
-## ----------------------------------------------------------
+
 ## Helper: build assets for one wave
-## ----------------------------------------------------------
+
 make_assets_wave <- function(df, wave_num) {
   df %>%
     transmute(
@@ -51,12 +51,12 @@ make_assets_wave <- function(df, wave_num) {
     )
 }
 
-## ----------------------------------------------------------
+
 ## MAIN: build_dat()
 ##   takes t3,t6,t9,t12,t7,w7,w8,w9 and returns merged dataset
 ##   with: age_ok, for_profit, yr1jb1, temp, y401k, notmissing,
 ##         hh_inc_year, etc.
-## ----------------------------------------------------------
+
 build_dat <- function(t3, t6, t9, t12, t7, w7, w8, w9) {
   id_vars <- c("SSUID","SHHADID","EENTAID","EPPPNUM")
 
@@ -194,9 +194,8 @@ build_dat <- function(t3, t6, t9, t12, t7, w7, w8, w9) {
   dat
 }
 
-## ----------------------------------------------------------
+
 ## Helpers to build Table 1 from a built dat
-## ----------------------------------------------------------
 w_mean_sd <- function(x, w) {
   x <- as.numeric(x)
   w <- as.numeric(w)
