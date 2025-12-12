@@ -1,0 +1,150 @@
+---
+title: "Untitled"
+format: html
+---
+
+```{r}
+library(dplyr)
+
+main <- dat_raw_aligned  # ← NOW USING dat_raw_aligned, but switch to data_raw to use 1115 sample size
+
+to_num <- function(x) suppressWarnings(as.numeric(x))
+
+safe_log <- function(x) {
+  ifelse(!is.na(x) & x > -10, log(x + 10), NA_real_)
+}
+
+main <- main %>%
+  mutate(
+    weight = wpfinwgt,
+    tagesq = tage^2,
+
+    ## log levels at wave 6
+    ltaltb6       = safe_log(taltb6),
+    lthhira6      = safe_log(thhira6),
+    lotherassets6 = safe_log(otherassets6),
+    lthhscdbt6    = safe_log(thhscdbt6),
+    lrhhuscbt6    = safe_log(rhhuscbt6),
+    ltcarval6     = safe_log(tcarval6),
+
+    ## second differences (12 − 2×9 + 6)
+    d21lthhira      = safe_log(thhira12)      - 2*safe_log(thhira9)      + safe_log(thhira6),
+    d21lotherassets = safe_log(otherassets12) - 2*safe_log(otherassets9) + safe_log(otherassets6),
+    d21lthhscdbt    = safe_log(thhscdbt12)    - 2*safe_log(thhscdbt9)    + safe_log(thhscdbt6),
+    d21lrhhuscbt    = safe_log(rhhuscbt12)    - 2*safe_log(rhhuscbt9)    + safe_log(rhhuscbt6),
+    d21ltcarval     = safe_log(tcarval12)     - 2*safe_log(tcarval9)     + safe_log(tcarval6)
+  ) %>%
+  ## apply paper’s required sample restrictions
+  filter(
+    age_ok,
+    for_profit,
+    yr1jb1
+  )
+
+```
+```{r}
+
+library(sandwich)
+library(lmtest)
+
+run_cluster_reg <- function(df, formula) {
+
+  df <- df %>%
+    dplyr::group_by(SSUID, SHHADID) %>%
+    dplyr::mutate(hid = dplyr::cur_group_id()) %>%
+    dplyr::ungroup()
+
+  mod <- lm(formula, data = df, weights = df$weight)
+
+  vc  <- sandwich::vcovCL(mod, cluster = df$hid)
+  ct  <- lmtest::coeftest(mod, vcov. = vc)
+
+  list(model = mod, coeftest = ct)
+}
+
+```
+```{r}
+
+
+var_roots <- c("taltb", "thhira", "otherassets",
+               "thhscdbt", "rhhuscbt", "tcarval")
+
+table2_results <- lapply(var_roots, function(vr) {
+
+  dv   <- paste0("d21l", vr)
+  lag6 <- paste0("l", vr, "6")
+
+  df <- main %>%
+    filter(
+      y401k == 1,
+      notmissing,
+      !is.na(.data[[dv]])
+    )
+
+  ## Formulae:
+  f1 <- reformulate("temp", response = dv)
+
+  covars2 <- c("temp", "tage", "tagesq", "hh_inc_year", "incmissing")
+  f2 <- reformulate(covars2, response = dv)
+
+  covars3 <- c("temp", lag6, "tage", "tagesq", "hh_inc_year", "incmissing")
+  f3 <- reformulate(covars3, response = dv)
+
+  s1 <- run_cluster_reg(df, f1)
+  s2 <- run_cluster_reg(df, f2)
+  s3 <- run_cluster_reg(df, f3)
+
+  extract_temp <- function(ct) {
+    if (!"temp" %in% rownames(ct)) return(c(coef=NA, se=NA))
+    c(coef = ct["temp","Estimate"],
+      se   = ct["temp","Std. Error"])
+  }
+
+  c1 <- extract_temp(s1$coeftest)
+  c2 <- extract_temp(s2$coeftest)
+  c3 <- extract_temp(s3$coeftest)
+
+  data.frame(
+    outcome   = vr,
+    spec      = c("no_controls", "controls", "controls_plus_lag"),
+    coef_temp = c(c1["coef"], c2["coef"], c3["coef"]),
+    se_temp   = c(c1["se"],   c2["se"],   c3["se"]),
+    n         = c(nobs(s1$model), nobs(s2$model), nobs(s3$model))
+  )
+})
+
+```
+
+```{r}
+
+
+table2_raw_aligned <- bind_rows(table2_results)
+table2_raw_aligned
+
+```
+```{r}
+
+
+library(dplyr)
+
+# Rename columns to avoid name collisions
+t_rep <- table2 %>%
+  rename(
+    coef_rep = coef_temp,
+    se_rep   = se_temp,
+    N_rep    = n
+  )
+
+t_raw <- table2_raw %>%
+  rename(
+    coef_raw = coef_temp,
+    se_raw   = se_temp,
+    N_raw    = n
+  )
+
+# Merge side-by-side by outcome + spec
+table2_compare <- t_rep %>%
+  inner_join(t_raw, by = c("outcome", "spec")) %>%
+  arrange(outcome, spec)
+
+table2_compare
