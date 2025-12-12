@@ -3,17 +3,13 @@ title: "Untitled"
 format: html
 ---
 
-
 ```{r}
-library(dplyr)
-library(tidyr)
-library(haven)
 
-to_num <- function(x) suppressWarnings(as.numeric(x))
 
-# ============================================================
-# 1. LOAD THE DATA *FIRST*  
-# ============================================================
+
+
+# 1. LOAD THE DATA (RAW)
+
 
 t3_raw  <- readRDS("data/raw/rds_1/t3.rds")
 t6_raw  <- readRDS("data/raw/rds_1/t6.rds")
@@ -26,9 +22,31 @@ w8_raw  <- readRDS("data/raw/rds_1/w8.rds")
 w9_raw  <- readRDS("data/raw/rds_1/w9.rds")
 
 
-# ============================================================
-# 2. LOAD REPLICATION FILES (IF YOU WANT TO COMPARE)
-# ============================================================
+```
+```{r}
+library(dplyr)
+library(tidyr)
+library(haven)
+
+to_num <- function(x) suppressWarnings(as.numeric(x))
+
+
+# 1. LOAD THE DATA *FIRST*  
+
+
+t3_raw  <- readRDS("data/raw/rds_1/t3.rds")
+t6_raw  <- readRDS("data/raw/rds_1/t6.rds")
+t9_raw  <- readRDS("data/raw/rds_1/t9.rds")
+t12_raw <- readRDS("data/raw/rds_1/t12.rds")
+
+t7_raw  <- readRDS("data/raw/rds_1/t7.rds")
+w7_raw  <- readRDS("data/raw/rds_1/w7.rds")
+w8_raw  <- readRDS("data/raw/rds_1/w8.rds")
+w9_raw  <- readRDS("data/raw/rds_1/w9.rds")
+
+
+# 2. LOAD REPLICATION FILES 
+
 
 t3_rep  <- read_dta("data/replication/dta/t3.dta") %>% rename_with(toupper)
 t6_rep  <- read_dta("data/replication/dta/t6.dta") %>% rename_with(toupper)
@@ -41,11 +59,6 @@ w8_rep  <- read_dta("data/replication/dta/w8.dta") %>% rename_with(toupper)
 w9_rep  <- read_dta("data/replication/dta/w9.dta") %>% rename_with(toupper)
 
 
-# ============================================================
-# 3. Define build_dat() function  
-# ============================================================
-
-## (your big build_dat() function goes here exactly)
 
 ```
 ```{r}
@@ -74,14 +87,14 @@ w8_rep <- read_dta(
 library(dplyr)
 library(tidyr)
 
-## ----------------------------------------------------------
+
 ## Helper: safe numeric conversion
-## ----------------------------------------------------------
+
 to_num <- function(x) suppressWarnings(as.numeric(x))
 
-## ----------------------------------------------------------
+
 ## Helper: build assets for one wave
-## ----------------------------------------------------------
+
 make_assets_wave <- function(df, wave_num) {
   df %>%
     transmute(
@@ -106,12 +119,12 @@ make_assets_wave <- function(df, wave_num) {
     )
 }
 
-## ----------------------------------------------------------
+
 ## MAIN: build_dat()
 ##   takes t3,t6,t9,t12,t7,w7,w8,w9 and returns merged dataset
 ##   with: age_ok, for_profit, yr1jb1, temp, y401k, notmissing,
 ##         hh_inc_year, etc.
-## ----------------------------------------------------------
+
 build_dat <- function(t3, t6, t9, t12, t7, w7, w8, w9) {
   id_vars <- c("SSUID","SHHADID","EENTAID","EPPPNUM")
 
@@ -197,37 +210,48 @@ build_dat <- function(t3, t6, t9, t12, t7, w7, w8, w9) {
     left_join(year1_income, by = id_vars)
 
   # 6) Derive sample flags and d21ltaltb
-  dat <- dat %>%
-    mutate(
-      age_ok = !is.na(tage) & tage >= 22 & tage <= 64,
-      for_profit = (eclwrk1 == 1),
-      yr1jb1 = dplyr::case_when(
-        srotaton == 1 ~ tsjdate1 > 19970299,
-        srotaton == 2 ~ tsjdate1 > 19970399,
-        srotaton == 3 ~ tsjdate1 > 19970499,
-        srotaton == 4 ~ tsjdate1 > 19970599,
-        TRUE          ~ NA
-      ),
-      temp = as.integer(
-        (enoina03 == 1 & etdeffen == 1) |
-        (enoinb03 == 1)
-      ),
-      y401k = (temp == 1) |
-              (e1taxdef == 1) |
-              (e2taxdef == 1) |
-              (e3taxdef == 1) |
-              (etdeffen == 1 & yr1jb1 == 1),
-      d21ltaltb = log(taltb12 + 10) - 2 * log(taltb9 + 10) + log(taltb6 + 10),
-      notmissing = !is.na(d21ltaltb),
-      incmissing = as.integer(is.na(hh_inc_year))
-    )
+ dat <- dat %>%
+  mutate(
+    age_ok   = !is.na(tage) & tage >= 22 & tage <= 64,
+    for_profit = (eclwrk1 == 1),
+    yr1jb1 = dplyr::case_when(
+      srotaton == 1 ~ tsjdate1 > 19970299,
+      srotaton == 2 ~ tsjdate1 > 19970399,
+      srotaton == 3 ~ tsjdate1 > 19970499,
+      srotaton == 4 ~ tsjdate1 > 19970599,
+      TRUE          ~ NA
+    ),
+    temp = as.integer(
+      (enoina03 == 1 & etdeffen == 1) |
+      (enoinb03 == 1)
+    ),
+    y401k = (temp == 1) |
+            (e1taxdef == 1) |
+            (e2taxdef == 1) |
+            (e3taxdef == 1) |
+            (etdeffen == 1 & yr1jb1 == 1),
+
+    d21ltaltb = log(taltb12 + 10) - 2 * log(taltb9 + 10) + log(taltb6 + 10),
+    lnA6      = log(taltb6 + 10),
+
+    # income: allowed to be missing, we flag it
+    incmissing = as.integer(is.na(hh_inc_year)),
+
+    # tweak: require regression vars (except hh_inc_year) to be non-missing
+    notmissing = !is.na(d21ltaltb) &
+                 !is.na(tage) &
+                 !is.na(eclwrk1) &
+                 !is.na(tsjdate1) &
+                 !is.na(srotaton) &
+                 !is.na(wpfinwgt)
+  )
 
   dat
 }
 
-## ----------------------------------------------------------
+
 ## Helpers to build Table 1 from a built dat
-## ----------------------------------------------------------
+
 w_mean_sd <- function(x, w) {
   x <- as.numeric(x)
   w <- as.numeric(w)
@@ -264,7 +288,7 @@ make_block <- function(df) {
 }
 
 make_table1 <- function(dat) {
-  # Apply the same sample restrictions as in the Stata do-file
+  # Apply same sample restrictions
   table1_sample <- dat %>%
     filter(
       age_ok,
@@ -316,5 +340,49 @@ dat_rep <- build_dat(
 
 table1_rep <- make_table1(dat_rep)
 table1_rep
+
+```
+
+
+```{r}
+id_vars <- c("SSUID","SHHADID","EENTAID","EPPPNUM")
+
+normalize_ids <- function(df) {
+  df %>%
+    mutate(
+      SSUID   = sub("^0+", "", as.character(SSUID)),
+      SHHADID = sub("^0+", "", as.character(SHHADID)),
+      EENTAID = sub("^0+", "", as.character(EENTAID)),
+      EPPPNUM = sub("^0+", "", as.character(EPPPNUM))
+    )
+}
+
+
+```
+```{r}
+# Rebuild from scratch using existing build_dat()
+dat_raw <- build_dat(
+  t3_raw, t6_raw, t9_raw, t12_raw,
+  t7_raw, w7_raw, w8_raw, w9_raw
+)
+
+dat_rep <- build_dat(
+  t3_rep, t6_rep, t9_rep, t12_rep,
+  t7_rep, w7_rep, w8_rep, w9_rep
+)
+
+# Normalize IDs
+dat_raw_id <- normalize_ids(dat_raw)
+dat_rep_id <- normalize_ids(dat_rep)
+
+# Check ID sets really match
+raw_ids <- dat_raw_id %>% select(all_of(id_vars)) %>% distinct()
+rep_ids <- dat_rep_id %>% select(all_of(id_vars)) %>% distinct()
+
+rep_not_raw <- dplyr::anti_join(rep_ids, raw_ids, by = id_vars)
+raw_not_rep <- dplyr::anti_join(raw_ids, rep_ids, by = id_vars)
+
+nrow(rep_not_raw)  # should be 0
+nrow(raw_not_rep)  # should be 0
 
 ```
