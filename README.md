@@ -1,8 +1,4 @@
 # Replication and Re-Analysis of Gelber (2011): How Do 401(k)s Affect Saving?
-Authors:
-Keval Amin & Stephanie Quiroz
-University of California, Berkeley
-
 ---
 
 ## 📌 Project Overview
