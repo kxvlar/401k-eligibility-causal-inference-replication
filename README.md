@@ -3,7 +3,7 @@
 
 ## 📌 Project Overview
 
-This repository contains our final project for **STAT 156 (Causal Inference)** at UC Berkeley.
+This repository contains our final project for **STAT 156/256 (Causal Inference)** at UC Berkeley.
 
 We replicate and extend:
 
