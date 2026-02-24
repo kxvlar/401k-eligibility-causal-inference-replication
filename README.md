@@ -12,7 +12,7 @@ This repository contains our final project for **STAT 156 (Causal Inference)** a
 
 We replicate and extend:
 
-> Gelber, Alexander (2011). *How Do 401(k)s Affect Savings[2011-how-do-401(k)s-affect-saving-evidence-from-changes-in-401(k)-eligibility (1).pdf](https://github.com/user-attachments/files/25532520/2011-how-do-401.k.s-affect-saving-evidence-from-changes-in-401.k.-eligibility.1.pdf)*
+> [Gelber, Alexander (2011). *How Do 401(k)s Affect Savings?*](https://github.com/user-attachments/files/25532520/2011-how-do-401.k.s-affect-saving-evidence-from-changes-in-401.k.-eligibility.1.pdf)
 
 The core research question:
 
