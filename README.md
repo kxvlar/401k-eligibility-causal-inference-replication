@@ -44,17 +44,6 @@ This allows us to test sensitivity to data construction.
 
 We replicate Gelber’s regression:
 
-[
-Y_i = \alpha + \tau \cdot \text{Eligible}_i + f(\text{Age}_i) + X_i'\beta + \varepsilon_i
-]
-
-where the outcome is a **second difference in log assets**:
-
-[
-Y_i =
-\log(A_{12}+10) - 2\log(A_{9}+10) + \log(A_{6}+10)
-]
-
 This measures whether asset growth accelerates after eligibility.
 
 Our replication confirms:
