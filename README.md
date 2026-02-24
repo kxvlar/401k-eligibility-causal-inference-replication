@@ -11,7 +11,7 @@ We replicate and extend:
 
 The core research question:
 
-> *Does eligibility for a 401(k) increase household saving, or does it simply shift assets across accounts?*
+*Does eligibility for a 401(k) increase household saving, or does it simply shift assets across accounts?*
 
 This question is difficult because individuals who prefer saving may self-select into jobs offering 401(k)s. Gelber solves this using **tenure-based eligibility rules** as a quasi-natural experiment. We replicate his approach and extend it using causal inference methods learned in class.
 
